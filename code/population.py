@@ -1,8 +1,11 @@
 from pyspark import SparkConf,SparkContext,HiveContext
 from pyspark.sql.functions import dayofweek, month, to_timestamp, countDistinct
 import pyspark.sql.functions as sf
-from shapely.geometry import Polygon, mapping
+from shapely.geometry import  mapping
 from fiona import collection
+
+import geopandas as gpd
+from shapely.geometry import Point, Polygon
 
 
 def read_cdr_data(table_name):
@@ -105,36 +108,16 @@ def calculate_population_cluster_rainy_season(cdr_data):
     return average_data
 
 
-def create_shape_file(data, shpOut):
-
-    # Define shp file schema
-    schema = { 'geometry': 'Polygon', 'properties': { 'Name': 'str' } }
-
-    # Create array for storing vertices
-    polyPoints = []
-
-    # Create shp file
-    with collection(shpOut, "w", "ESRI Shapefile", schema) as output:
-        # Loop through dataframe and populate shp file
-        for row in data.rdd.toLocalIterator():
-
-            # Add points to polyPoints
-            polyPoints.append([row['lon'], row['lat'], row['avg']])
-
-            # Define polygon
-        polygon = Polygon(polyPoints)
-
-        # Write output
-        output.write({
-            'properties': {'Name': 'Polygon_from_points' },
-            'geometry': mapping(polygon)
-        })
+def spark_df_to_geopandas_df_for_points(sdf):
+    df = sdf.toPandas()
+    gdf = gpd.GeoDataFrame(
+        df.drop(['lon', 'lat'], axis=1),
+        crs={'init': 'epsg:4326'},
+        geometry=[Point(xy) for xy in zip(df.lon, df.lat)])
+    return gdf
 
 
 if __name__ == "__main__":
-
-    # Enable Arrow-based columnar data spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
-
 
     # table name
     table_name = "cdr_clustered"
@@ -144,18 +127,22 @@ if __name__ == "__main__":
 
     # # # # Generate Data for all data population
     agg_data = calculate_population_general(data)
-    create_shape_file(agg_data, "population_based_on_all_data_output.shp")
-    #agg_data.coalesce(1).write.mode("overwrite").csv("population_based_on_all_data_output")
-    #
-    # # Generate Data for night and weekends population
-    # agg_data = calculate_population_cluster_night_weekends(data)
-    # agg_data.coalesce(1).write.mode("overwrite").csv("population_based_on_night_weekend_output")
+
+    geospark = spark_df_to_geopandas_df_for_points(agg_data)
+    geospark.to_file('population_based_on_all_data_output.shp', index=False)
+
+    # Generate Data for night and weekends population
+    agg_data = calculate_population_cluster_night_weekends(data)
+    geospark = spark_df_to_geopandas_df_for_points(agg_data)
+    geospark.to_file('population_based_on_night_weekend_output.shp', index=False)
 
     # Generate Data for days and week days population
-    # agg_data = calculate_population_cluster_weekdays_day(data)
-    # agg_data.coalesce(1).write.mode("overwrite").csv("population_based_on_weekdays_days_output")
-    #
-    # # Generate Data for rainy season population
-    # agg_data = calculate_population_cluster_weekdays_day(data)
-    # agg_data.coalesce(1).write.mode("overwrite").csv("population_based_rainy_season_output")
+    agg_data = calculate_population_cluster_weekdays_day(data)
+    geospark = spark_df_to_geopandas_df_for_points(agg_data)
+    geospark.to_file('population_based_on_weekdays_days_output.shp', index=False)
+
+    # Generate Data for rainy season population
+    agg_data = calculate_population_cluster_weekdays_day(data)
+    geospark = spark_df_to_geopandas_df_for_points(agg_data)
+    geospark.to_file('population_based_rainy_season_output.shp', index=False)
 
