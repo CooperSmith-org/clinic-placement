@@ -140,7 +140,7 @@ if __name__ == "__main__":
     geospark.to_file('population_based_on_weekdays_days_output.shp', index=False)
 
     # Generate Data for rainy season population
-    agg_data = calculate_population_cluster_weekdays_day(data)
+    agg_data = calculate_population_cluster_rainy_season(data)
     geospark = spark_df_to_geopandas_df_for_points(agg_data)
     geospark.to_file('population_based_rainy_season_output.shp', index=False)
 
