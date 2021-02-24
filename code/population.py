@@ -1,11 +1,9 @@
-from pyspark import SparkConf,SparkContext,HiveContext
+from pyspark import SparkConf, SparkContext, HiveContext
 from pyspark.sql.functions import dayofweek, month, to_timestamp, countDistinct
 import pyspark.sql.functions as sf
-from shapely.geometry import  mapping
-from fiona import collection
 
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 
 
 def read_cdr_data(table_name):
