@@ -1,13 +1,15 @@
 from pyspark import SparkConf,SparkContext,HiveContext
 from pyspark.sql.functions import dayofweek, month, to_timestamp, countDistinct
 import pyspark.sql.functions as sf
+from shapely.geometry import Polygon, mapping
+from fiona import collection
 
 
 def read_cdr_data(table_name):
 
     # create Spark context with Spark configuration
     conf = SparkConf().setAppName("Cluster Population")
-    conf.set('spark.executor.memory', '8192m')
+    conf.set('spark.executor.memory', '16g')
     conf.set('spark.driver.memory', '10g')
     conf.set('parquet.enable.summary - metadata', False)
     conf.set('spark.sql.parquet.binaryAsString', True)
@@ -18,7 +20,6 @@ def read_cdr_data(table_name):
     conf.set('spark.sql.tungsten.enabled', False)
     conf.set('spark.sql.codegen', False)
     conf.set('spark.sql.unsafe.enabled', False)
-    conf.set('spark.executor.memory', '16g')
     conf.set('spark.yarn.executor.memoryOverhead', 8192)
     conf.set('spark.driver.am.memory', '8G')
     conf.set('spark.yarn.am.memoryOverhead', '8g')
@@ -104,6 +105,32 @@ def calculate_population_cluster_rainy_season(cdr_data):
     return average_data
 
 
+def create_shape_file(data, shpOut):
+
+    # Define shp file schema
+    schema = { 'geometry': 'Polygon', 'properties': { 'Name': 'str' } }
+
+    # Create array for storing vertices
+    polyPoints = []
+
+    # Create shp file
+    with collection(shpOut, "w", "ESRI Shapefile", schema) as output:
+        # Loop through dataframe and populate shp file
+        for row in data.rdd.toLocalIterator():
+
+            # Add points to polyPoints
+            polyPoints.append([row['lon'], row['lat'], row['avg']])
+
+            # Define polygon
+        polygon = Polygon(polyPoints)
+
+        # Write output
+        output.write({
+            'properties': {'Name': 'Polygon_from_points' },
+            'geometry': mapping(polygon)
+        })
+
+
 if __name__ == "__main__":
 
     # Enable Arrow-based columnar data spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
@@ -115,23 +142,20 @@ if __name__ == "__main__":
     # Read Data from spark table
     data = read_cdr_data(table_name)
 
-    # Generate Data for all data population
+    # # # # Generate Data for all data population
     agg_data = calculate_population_general(data)
-    pandas_df = agg_data.toPandas()
-    pandas_df.to_csv('population_based_on_all_data_output.csv')
-
-    # Generate Data for night and weekends population
-    agg_data = calculate_population_cluster_night_weekends(data)
-    pandas_df = agg_data.toPandas()
-    pandas_df.to_csv('population_based_on_night_weekend_output.csv')
+    create_shape_file(agg_data, "population_based_on_all_data_output.shp")
+    #agg_data.coalesce(1).write.mode("overwrite").csv("population_based_on_all_data_output")
+    #
+    # # Generate Data for night and weekends population
+    # agg_data = calculate_population_cluster_night_weekends(data)
+    # agg_data.coalesce(1).write.mode("overwrite").csv("population_based_on_night_weekend_output")
 
     # Generate Data for days and week days population
-    agg_data = calculate_population_cluster_weekdays_day(data)
-    pandas_df = agg_data.toPandas()
-    pandas_df.to_csv('population_based_on_weekdays_days_output.csv')
-
-    # Generate Data for rainy season population
-    agg_data = calculate_population_cluster_weekdays_day(data)
-    pandas_df = agg_data.toPandas()
-    pandas_df.to_csv('population_based_rainy_season_output.csv')
+    # agg_data = calculate_population_cluster_weekdays_day(data)
+    # agg_data.coalesce(1).write.mode("overwrite").csv("population_based_on_weekdays_days_output")
+    #
+    # # Generate Data for rainy season population
+    # agg_data = calculate_population_cluster_weekdays_day(data)
+    # agg_data.coalesce(1).write.mode("overwrite").csv("population_based_rainy_season_output")
 
