@@ -1,5 +1,5 @@
 from pyspark import SparkContext, HiveContext
-from pyspark.sql.functions import dayofweek, month, to_timestamp, countDistinct
+from pyspark.sql.functions import dayofweek, month, to_timestamp, countDistinct, year
 import pyspark.sql.functions as sf
 import geopandas as gpd
 from shapely.geometry import Point
@@ -29,7 +29,7 @@ def calculate_population_general(df):
         alias('count')).select('event_date', 'cluster_id', "count", "lat", "lon")
 
     df_average_data = calculate_average_data(df_aggregated_data)
-
+    df_aggregated_data.unpersist()
     return df_average_data
 
 
@@ -46,6 +46,7 @@ def calculate_population_cluster_night_weekends(cdr_data):
         select('event_date', 'cluster_id', "count", "lat", "lon")
 
     df_average_data = calculate_average_data(df_aggregated_data)
+    df_aggregated_data.unpersist()
 
     return df_average_data
 
@@ -59,10 +60,11 @@ def calculate_population_cluster_weekly_night_weekends(cdr_data):
     days = [1, 7]
 
     df_aggregated_data = cdr_data.where( (dayofweek(to_timestamp("event_date")).isin(days)) | (cdr_data.period.isin(periods))). \
-        groupBy([sf.weekofyear("event_date").alias("date_by_week"), "cluster_id", "lat", "lon"]).agg(countDistinct("subscriber_id").alias('count')). \
-        select('date_by_week', 'cluster_id', "count", "lat", "lon")
+        groupBy([sf.weekofyear("event_date").alias("date_by_week"), sf.year("event_date").alias("year"), "cluster_id", "lat", "lon"]).agg(countDistinct("subscriber_id").alias('count')). \
+        select('date_by_week', 'year', 'cluster_id', "count", "lat", "lon")
 
     df_average_data = calculate_average_data(df_aggregated_data)
+    df_aggregated_data.unpersist()
 
     return df_average_data
 
@@ -80,6 +82,7 @@ def calculate_population_cluster_weekdays_day(df):
         select('event_date', 'cluster_id', "count", "lat", "lon")
 
     df_average_data = calculate_average_data(df_aggregated_data)
+    df_aggregated_data.unpersist()
 
     return df_average_data
 
